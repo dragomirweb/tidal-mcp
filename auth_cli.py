@@ -5,15 +5,9 @@ Handles OAuth device flow authentication for TIDAL MCP.
 """
 
 import sys
-import tempfile
-from pathlib import Path
 
-# Add tidal_api to path
-sys.path.insert(0, str(Path(__file__).parent / "tidal_api"))
-
-from browser_session import BrowserSession, _ensure_https
-
-SESSION_FILE = Path(tempfile.gettempdir()) / "tidal-session-oauth.json"
+from tidal_api.browser_session import BrowserSession, _ensure_https
+from mcp_server.utils import SESSION_FILE
 
 
 def print_auth_url(auth_url: str, expires_in: int):
@@ -35,7 +29,7 @@ def main():
     if SESSION_FILE.exists():
         session.load_session_from_file(SESSION_FILE)
         if session.check_login():
-            print(f"✓ Already authenticated! (User ID: {session.user.id})")
+            print(f"Already authenticated! (User ID: {session.user.id})")
             print(f"Session file: {SESSION_FILE}")
             return 0
 
@@ -53,19 +47,19 @@ def main():
 
         if session.check_login():
             session.save_session_to_file(SESSION_FILE)
-            print(f"\n✓ Authentication successful!")
+            print(f"\nAuthentication successful!")
             print(f"User ID: {session.user.id}")
             print(f"Session saved to: {SESSION_FILE}\n")
             return 0
         else:
-            print("\n✗ Authentication failed", file=sys.stderr)
+            print("\nAuthentication failed", file=sys.stderr)
             return 1
 
     except TimeoutError:
-        print("\n✗ Authentication timed out", file=sys.stderr)
+        print("\nAuthentication timed out", file=sys.stderr)
         return 1
     except Exception as e:
-        print(f"\n✗ Error: {e}", file=sys.stderr)
+        print(f"\nError: {e}", file=sys.stderr)
         return 1
 
 
