@@ -2,7 +2,7 @@
 TIDAL MCP server — direct-call architecture.
 
 All MCP tools call tidal_api/routes/ implementation functions directly.
-There is no Flask server, no HTTP, no threads, and no port in this process.
+There is no Flask server, no HTTP, and no port in this process.
 stdout is reserved exclusively for the MCP JSON-RPC protocol.
 """
 
@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any, Tuple
 
 from mcp.server.fastmcp import FastMCP
 
-# Route implementation functions (called directly, not via HTTP)
+# Route implementation functions (called directly)
 from tidal_api.routes.auth import (
     handle_login_start,
     handle_login_poll,
@@ -41,7 +41,7 @@ from tidal_api.routes.search import (
 from tidal_api.browser_session import BrowserSession
 from mcp_server.utils import SESSION_FILE
 
-print("TIDAL MCP server starting (direct-call mode, no Flask)", file=sys.stderr)
+print("TIDAL MCP server starting", file=sys.stderr)
 
 # =============================================================================
 # MCP APP
