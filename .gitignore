@@ -30,6 +30,7 @@ tidal-session-oauth.json
 *.swp
 *.swo
 *~
+tasks/**/*
 
 # Claude Code machine-specific config
 /.claude/
