@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ibeal/tidal-mcp",
+  "description": "MCP server for TIDAL - search tracks, manage playlists, and get personalized recommendations",
+  "repository": {
+    "url": "https://github.com/ibeal/tidal-mcp",
+    "source": "github"
+  },
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/ibeal/tidal-mcp:latest",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "Port for the TIDAL API Flask server (default: 5050)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "TIDAL_MCP_PORT"
+        }
+      ]
+    }
+  ]
+}

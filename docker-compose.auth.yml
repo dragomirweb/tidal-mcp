@@ -1,0 +1,11 @@
+services:
+  tidal-auth:
+    build: .
+    image: tidal-mcp
+    container_name: tidal-mcp-auth
+    network_mode: host
+    volumes:
+      - /tmp:/tmp
+    stdin_open: true
+    tty: true
+    command: /app/.venv/bin/python /app/auth_cli.py

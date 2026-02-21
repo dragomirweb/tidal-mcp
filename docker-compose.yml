@@ -1,0 +1,5 @@
+services:
+  tidal-mcp:
+    build: .
+    container_name: tidal-mcp
+    restart: unless-stopped

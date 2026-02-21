@@ -1,0 +1,48 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+venv/
+env/
+
+# MCP Registry authentication tokens (IMPORTANT - contains secrets!)
+.mcpregistry_github_token
+.mcpregistry_registry_token
+
+# TIDAL session/authentication files
+tidal-session-oauth.json
+*.oauth.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code machine-specific config
+/.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker volumes/data
+docker-data/
+
+# Logs
+*.log
+
+# Others
+play.ipynb
