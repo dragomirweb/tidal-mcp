@@ -12,24 +12,34 @@ def create_new_playlist(
 ) -> Tuple[dict, int]:
     """Implementation logic for creating a new playlist."""
     try:
+        if not title or not title.strip():
+            return {"error": "title cannot be empty."}, 400
+
         if not isinstance(track_ids, list):
             return {"error": "'track_ids' must be a list"}, 400
 
         # Create the playlist
         playlist = session.user.create_playlist(title, description)
 
-        # Add tracks to the playlist
-        playlist.add(track_ids)
+        # Add tracks to the playlist (skip if empty)
+        if track_ids:
+            playlist.add(track_ids)
 
         # Return playlist information
         playlist_info = {
             "id": playlist.id,
             "title": playlist.name,
-            "description": playlist.description,
-            "created": playlist.created,
-            "last_updated": playlist.last_updated,
-            "track_count": playlist.num_tracks,
-            "duration": playlist.duration,
+            "description": playlist.description
+            if hasattr(playlist, "description")
+            else "",
+            "created": playlist.created if hasattr(playlist, "created") else None,
+            "last_updated": playlist.last_updated
+            if hasattr(playlist, "last_updated")
+            else None,
+            "track_count": playlist.num_tracks
+            if hasattr(playlist, "num_tracks")
+            else 0,
+            "duration": playlist.duration if hasattr(playlist, "duration") else 0,
         }
 
         return {
@@ -63,7 +73,7 @@ def get_playlists(session: BrowserSession) -> Tuple[dict, int]:
                 if hasattr(playlist, "num_tracks")
                 else 0,
                 "duration": playlist.duration if hasattr(playlist, "duration") else 0,
-                "url": f"https://tidal.com/playlist/{playlist.id}",
+                "url": f"https://tidal.com/browse/playlist/{playlist.id}?u",
             }
             playlist_list.append(playlist_info)
 
@@ -82,6 +92,9 @@ def get_tracks_from_playlist(
 ) -> Tuple[dict, int]:
     """Implementation logic for getting tracks from a playlist."""
     try:
+        if not playlist_id or not playlist_id.strip():
+            return {"error": "playlist_id cannot be empty."}, 400
+
         playlist = session.playlist(playlist_id)
         if not playlist:
             return {"error": f"Playlist with ID {playlist_id} not found"}, 404
@@ -117,6 +130,9 @@ def delete_playlist_by_id(
 ) -> Tuple[dict, int]:
     """Implementation logic for deleting a playlist."""
     try:
+        if not playlist_id or not playlist_id.strip():
+            return {"error": "playlist_id cannot be empty."}, 400
+
         playlist = session.playlist(playlist_id)
         if not playlist:
             return {"error": f"Playlist with ID {playlist_id} not found"}, 404
@@ -137,8 +153,14 @@ def add_tracks(
 ) -> Tuple[dict, int]:
     """Implementation logic for adding tracks to a playlist."""
     try:
+        if not playlist_id or not playlist_id.strip():
+            return {"error": "playlist_id cannot be empty."}, 400
+
         if not isinstance(track_ids, list):
             return {"error": "'track_ids' must be a list"}, 400
+
+        if not track_ids:
+            return {"error": "track_ids cannot be empty."}, 400
 
         playlist = session.playlist(playlist_id)
         if not playlist:
@@ -165,6 +187,9 @@ def remove_tracks(
 ) -> Tuple[dict, int]:
     """Implementation logic for removing tracks from a playlist."""
     try:
+        if not playlist_id or not playlist_id.strip():
+            return {"error": "playlist_id cannot be empty."}, 400
+
         playlist = session.playlist(playlist_id)
         if not playlist:
             return {"error": f"Playlist with ID {playlist_id} not found"}, 404
@@ -223,7 +248,10 @@ def update_playlist_metadata(
 ) -> Tuple[dict, int]:
     """Implementation logic for updating playlist metadata."""
     try:
-        if not title and not description:
+        if not playlist_id or not playlist_id.strip():
+            return {"error": "playlist_id cannot be empty."}, 400
+
+        if title is None and description is None:
             return {"error": "Must provide at least 'title' or 'description'"}, 400
 
         playlist = session.playlist(playlist_id)
@@ -237,8 +265,10 @@ def update_playlist_metadata(
             "message": "Playlist updated successfully",
             "playlist_id": playlist_id,
             "updated_fields": {
-                "title": title if title else playlist.name,
-                "description": description if description else playlist.description,
+                "title": title if title is not None else playlist.name,
+                "description": description
+                if description is not None
+                else playlist.description,
             },
         }, 200
 
@@ -251,6 +281,9 @@ def move_track(
 ) -> Tuple[dict, int]:
     """Implementation logic for moving a track within a playlist."""
     try:
+        if not playlist_id or not playlist_id.strip():
+            return {"error": "playlist_id cannot be empty."}, 400
+
         if not isinstance(from_index, int) or not isinstance(to_index, int):
             return {"error": "'from_index' and 'to_index' must be integers"}, 400
 
@@ -261,7 +294,7 @@ def move_track(
         if not playlist:
             return {"error": f"Playlist with ID {playlist_id} not found"}, 404
 
-        playlist.move(from_index, to_index)
+        playlist.move_by_index(from_index, to_index)
 
         return {
             "status": "success",
