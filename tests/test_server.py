@@ -4,8 +4,6 @@ Tests the pure helper functions only — no MCP framework, no tidalapi,
 no network, no session file. These are safe to run in CI.
 """
 
-import pytest
-
 # Import only the helper, not the full module (which needs mcp installed)
 # We test _call() by importing the function directly after patching FastMCP.
 from unittest.mock import patch, MagicMock
