@@ -6,6 +6,8 @@ from typing import Optional, Tuple
 from tidal_api.browser_session import BrowserSession
 from tidal_api.utils import format_track_data, bound_limit
 
+VALID_SEARCH_TYPES = {"all", "tracks", "albums", "artists", "playlists"}
+
 
 def comprehensive_search(
     session: BrowserSession,
@@ -15,23 +17,23 @@ def comprehensive_search(
 ) -> Tuple[dict, int]:
     """Implementation logic for comprehensive search."""
     try:
-        if not session.check_login():
-            return {"error": "Not authenticated with TIDAL"}, 401
+        if not query or not query.strip():
+            return {"error": "query cannot be empty."}, 400
+
+        if search_type not in VALID_SEARCH_TYPES:
+            return {
+                "error": f"Invalid search_type '{search_type}'. "
+                f"Must be one of: {', '.join(sorted(VALID_SEARCH_TYPES))}"
+            }, 400
 
         limit = bound_limit(limit)
         results = {}
 
+        # Single API call — tidalapi returns all content types at once.
+        search_results = session.search(query, limit=limit)
+
         if search_type == "all" or search_type == "tracks":
-            track_results = session.search(query, limit=limit)
-
-            tracks = []
-            if hasattr(track_results, "tracks") and track_results.tracks:
-                tracks = track_results.tracks
-            elif isinstance(track_results, dict) and "tracks" in track_results:
-                tracks = track_results["tracks"]
-            elif isinstance(track_results, list):
-                tracks = track_results
-
+            tracks = _extract_tracks(search_results)
             if tracks:
                 results["tracks"] = {
                     "items": [format_track_data(track) for track in tracks[:limit]],
@@ -39,97 +41,27 @@ def comprehensive_search(
                 }
 
         if search_type == "all" or search_type == "albums":
-            album_results = session.search(query, limit=limit)
-
-            albums = []
-            if hasattr(album_results, "albums") and album_results.albums:
-                albums = album_results.albums
-            elif isinstance(album_results, dict) and "albums" in album_results:
-                albums = album_results["albums"]
-
+            albums = _extract_albums(search_results)
             if albums:
-                formatted_albums = []
-                for album in albums[:limit]:
-                    album_data = {
-                        "id": album.id,
-                        "title": album.name,
-                        "artist": album.artist.name
-                        if album.artist
-                        else "Unknown Artist",
-                        "release_date": str(album.release_date)
-                        if hasattr(album, "release_date") and album.release_date
-                        else None,
-                        "num_tracks": album.num_tracks
-                        if hasattr(album, "num_tracks")
-                        else 0,
-                        "duration": album.duration if hasattr(album, "duration") else 0,
-                        "explicit": album.explicit
-                        if hasattr(album, "explicit")
-                        else False,
-                        "url": f"https://tidal.com/browse/album/{album.id}?u",
-                    }
-                    formatted_albums.append(album_data)
                 results["albums"] = {
-                    "items": formatted_albums,
-                    "total": len(formatted_albums),
+                    "items": [_format_album(a) for a in albums[:limit]],
+                    "total": len(albums[:limit]),
                 }
 
         if search_type == "all" or search_type == "artists":
-            artist_results = session.search(query, limit=limit)
-
-            artists = []
-            if hasattr(artist_results, "artists") and artist_results.artists:
-                artists = artist_results.artists
-            elif isinstance(artist_results, dict) and "artists" in artist_results:
-                artists = artist_results["artists"]
-
+            artists = _extract_artists(search_results)
             if artists:
-                formatted_artists = []
-                for artist in artists[:limit]:
-                    artist_data = {
-                        "id": artist.id,
-                        "name": artist.name,
-                        "url": f"https://tidal.com/browse/artist/{artist.id}?u",
-                    }
-                    formatted_artists.append(artist_data)
                 results["artists"] = {
-                    "items": formatted_artists,
-                    "total": len(formatted_artists),
+                    "items": [_format_artist(a) for a in artists[:limit]],
+                    "total": len(artists[:limit]),
                 }
 
         if search_type == "all" or search_type == "playlists":
-            playlist_results = session.search(query, limit=limit)
-
-            playlists = []
-            if hasattr(playlist_results, "playlists") and playlist_results.playlists:
-                playlists = playlist_results.playlists
-            elif isinstance(playlist_results, dict) and "playlists" in playlist_results:
-                playlists = playlist_results["playlists"]
-
+            playlists = _extract_playlists(search_results)
             if playlists:
-                formatted_playlists = []
-                for playlist in playlists[:limit]:
-                    playlist_data = {
-                        "id": playlist.id,
-                        "title": playlist.name,
-                        "description": playlist.description
-                        if hasattr(playlist, "description")
-                        else None,
-                        "creator": playlist.creator.name
-                        if hasattr(playlist, "creator") and playlist.creator
-                        else "Unknown",
-                        "num_tracks": playlist.num_tracks
-                        if hasattr(playlist, "num_tracks")
-                        else 0,
-                        "duration": playlist.duration
-                        if hasattr(playlist, "duration")
-                        else 0,
-                        "url": f"https://tidal.com/browse/playlist/{playlist.id}?u",
-                    }
-                    formatted_playlists.append(playlist_data)
                 results["playlists"] = {
-                    "items": formatted_playlists,
-                    "total": len(formatted_playlists),
+                    "items": [_format_playlist(p) for p in playlists[:limit]],
+                    "total": len(playlists[:limit]),
                 }
 
         # Create summary
@@ -150,13 +82,103 @@ def comprehensive_search(
         return {"error": f"Search failed: {str(e)}"}, 500
 
 
+# =============================================================================
+# Extraction helpers — pull typed lists from tidalapi search results
+# =============================================================================
+
+
+def _extract_tracks(search_results):
+    """Extract tracks list from a tidalapi search result object."""
+    if hasattr(search_results, "tracks") and search_results.tracks:
+        return search_results.tracks
+    if isinstance(search_results, dict) and "tracks" in search_results:
+        return search_results["tracks"]
+    if isinstance(search_results, list):
+        return search_results
+    return []
+
+
+def _extract_albums(search_results):
+    """Extract albums list from a tidalapi search result object."""
+    if hasattr(search_results, "albums") and search_results.albums:
+        return search_results.albums
+    if isinstance(search_results, dict) and "albums" in search_results:
+        return search_results["albums"]
+    return []
+
+
+def _extract_artists(search_results):
+    """Extract artists list from a tidalapi search result object."""
+    if hasattr(search_results, "artists") and search_results.artists:
+        return search_results.artists
+    if isinstance(search_results, dict) and "artists" in search_results:
+        return search_results["artists"]
+    return []
+
+
+def _extract_playlists(search_results):
+    """Extract playlists list from a tidalapi search result object."""
+    if hasattr(search_results, "playlists") and search_results.playlists:
+        return search_results.playlists
+    if isinstance(search_results, dict) and "playlists" in search_results:
+        return search_results["playlists"]
+    return []
+
+
+# =============================================================================
+# Formatting helpers — convert tidalapi objects to plain dicts
+# =============================================================================
+
+
+def _format_album(album) -> dict:
+    """Format a tidalapi Album object into a plain dict."""
+    return {
+        "id": album.id,
+        "title": album.name,
+        "artist": album.artist.name if album.artist else "Unknown Artist",
+        "release_date": str(album.release_date)
+        if hasattr(album, "release_date") and album.release_date
+        else None,
+        "num_tracks": album.num_tracks if hasattr(album, "num_tracks") else 0,
+        "duration": album.duration if hasattr(album, "duration") else 0,
+        "explicit": album.explicit if hasattr(album, "explicit") else False,
+        "url": f"https://tidal.com/browse/album/{album.id}?u",
+    }
+
+
+def _format_artist(artist) -> dict:
+    """Format a tidalapi Artist object into a plain dict."""
+    return {
+        "id": artist.id,
+        "name": artist.name,
+        "url": f"https://tidal.com/browse/artist/{artist.id}?u",
+    }
+
+
+def _format_playlist(playlist) -> dict:
+    """Format a tidalapi Playlist object into a plain dict."""
+    return {
+        "id": playlist.id,
+        "title": playlist.name,
+        "description": playlist.description
+        if hasattr(playlist, "description")
+        else None,
+        "creator": playlist.creator.name
+        if hasattr(playlist, "creator") and playlist.creator
+        else "Unknown",
+        "num_tracks": playlist.num_tracks if hasattr(playlist, "num_tracks") else 0,
+        "duration": playlist.duration if hasattr(playlist, "duration") else 0,
+        "url": f"https://tidal.com/browse/playlist/{playlist.id}?u",
+    }
+
+
 def search_tracks_only(
     session: BrowserSession, query: str, limit: int = 50
 ) -> Tuple[dict, int]:
     """Implementation logic for tracks-only search."""
     try:
-        if not session.check_login():
-            return {"error": "Not authenticated with TIDAL"}, 401
+        if not query or not query.strip():
+            return {"error": "query cannot be empty."}, 400
 
         limit = bound_limit(limit)
 
@@ -214,31 +236,15 @@ def search_albums_only(
 ) -> Tuple[dict, int]:
     """Implementation logic for albums-only search."""
     try:
-        if not session.check_login():
-            return {"error": "Not authenticated with TIDAL"}, 401
+        if not query or not query.strip():
+            return {"error": "query cannot be empty."}, 400
 
         limit = bound_limit(limit)
         results = session.search(query, models=[tidalapi.Album], limit=limit)
 
-        if results and results.albums:
-            formatted_results = []
-            for album in results.albums:
-                album_data = {
-                    "id": album.id,
-                    "title": album.name,
-                    "artist": album.artist.name if album.artist else "Unknown Artist",
-                    "release_date": str(album.release_date)
-                    if hasattr(album, "release_date") and album.release_date
-                    else None,
-                    "num_tracks": album.num_tracks
-                    if hasattr(album, "num_tracks")
-                    else 0,
-                    "duration": album.duration if hasattr(album, "duration") else 0,
-                    "explicit": album.explicit if hasattr(album, "explicit") else False,
-                    "url": f"https://tidal.com/browse/album/{album.id}?u",
-                }
-                formatted_results.append(album_data)
-
+        albums = _extract_albums(results)
+        if albums:
+            formatted_results = [_format_album(a) for a in albums]
             return {
                 "query": query,
                 "type": "albums",
@@ -269,22 +275,15 @@ def search_artists_only(
 ) -> Tuple[dict, int]:
     """Implementation logic for artists-only search."""
     try:
-        if not session.check_login():
-            return {"error": "Not authenticated with TIDAL"}, 401
+        if not query or not query.strip():
+            return {"error": "query cannot be empty."}, 400
 
         limit = bound_limit(limit)
         results = session.search(query, models=[tidalapi.Artist], limit=limit)
 
-        if results and results.artists:
-            formatted_results = []
-            for artist in results.artists:
-                artist_data = {
-                    "id": artist.id,
-                    "name": artist.name,
-                    "url": f"https://tidal.com/browse/artist/{artist.id}?u",
-                }
-                formatted_results.append(artist_data)
-
+        artists = _extract_artists(results)
+        if artists:
+            formatted_results = [_format_artist(a) for a in artists]
             return {
                 "query": query,
                 "type": "artists",
@@ -315,34 +314,15 @@ def search_playlists_only(
 ) -> Tuple[dict, int]:
     """Implementation logic for playlists-only search."""
     try:
-        if not session.check_login():
-            return {"error": "Not authenticated with TIDAL"}, 401
+        if not query or not query.strip():
+            return {"error": "query cannot be empty."}, 400
 
         limit = bound_limit(limit)
         results = session.search(query, models=[tidalapi.Playlist], limit=limit)
 
-        if results and results.playlists:
-            formatted_results = []
-            for playlist in results.playlists:
-                playlist_data = {
-                    "id": playlist.id,
-                    "title": playlist.name,
-                    "description": playlist.description
-                    if hasattr(playlist, "description")
-                    else None,
-                    "creator": playlist.creator.name
-                    if hasattr(playlist, "creator") and playlist.creator
-                    else "Unknown",
-                    "num_tracks": playlist.num_tracks
-                    if hasattr(playlist, "num_tracks")
-                    else 0,
-                    "duration": playlist.duration
-                    if hasattr(playlist, "duration")
-                    else 0,
-                    "url": f"https://tidal.com/browse/playlist/{playlist.id}?u",
-                }
-                formatted_results.append(playlist_data)
-
+        playlists = _extract_playlists(results)
+        if playlists:
+            formatted_results = [_format_playlist(p) for p in playlists]
             return {
                 "query": query,
                 "type": "playlists",
