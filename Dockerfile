@@ -19,14 +19,8 @@ COPY start_mcp.py ./
 # This respects the uv.lock file and ensures all dependencies are properly installed
 RUN uv sync --frozen
 
-# Expose the Flask port (default 5050, configurable via TIDAL_MCP_PORT)
-EXPOSE 5050
-
-# Set the default port if not provided
-ENV TIDAL_MCP_PORT=5050
-
 # Bake in the TIDAL session so auth persists without volume mounts
 COPY tidal-session-oauth.json /tmp/tidal-session-oauth.json
 
-# Activate venv and run the MCP server
+# Run the MCP server (stdio transport, no ports needed)
 CMD [".venv/bin/python", "start_mcp.py"]
