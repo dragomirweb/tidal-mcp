@@ -43,14 +43,15 @@ def handle_login_start(session_file: Path) -> Tuple[dict, int]:
         except Exception:
             pass  # session file corrupt or expired — fall through to new login
 
-    # Start a fresh OAuth device flow (non-blocking)
+    # Start a fresh OAuth device flow (non-blocking).
+    # Any previously pending flow is silently discarded.
     try:
         session = BrowserSession()
         url, expires_in, future = session.login_oauth_start()
     except Exception as e:
         return {
+            "error": f"Failed to initiate TIDAL login: {str(e)}",
             "status": "error",
-            "message": f"Failed to initiate TIDAL login: {str(e)}",
         }, 500
 
     with _pending_lock:
@@ -58,6 +59,8 @@ def handle_login_start(session_file: Path) -> Tuple[dict, int]:
             "future": future,
             "session": session,
             "session_file": session_file,
+            "url": url,
+            "expires_in": expires_in,
         }
 
     return {
@@ -79,45 +82,47 @@ def handle_login_poll(session_file: Path) -> Tuple[dict, int]:
     """
     global _pending
 
+    # Read and (if completed) clear _pending atomically to avoid TOCTOU races.
     with _pending_lock:
         state = _pending
 
-    if state is None:
-        # No login in progress — check if we already have a valid session
-        if session_file.exists():
-            session = BrowserSession()
-            try:
-                session.load_session_from_file(session_file)
-                if session.check_login():
-                    return {
-                        "status": "success",
-                        "message": "Already authenticated with TIDAL",
-                        "user_id": session.user.id,
-                    }, 200
-            except Exception:
-                pass
-        return {
-            "status": "error",
-            "message": "No login in progress. Call tidal_login first.",
-        }, 400
+        if state is None:
+            # No login in progress — check if we already have a valid session
+            if session_file.exists():
+                session = BrowserSession()
+                try:
+                    session.load_session_from_file(session_file)
+                    if session.check_login():
+                        return {
+                            "status": "success",
+                            "message": "Already authenticated with TIDAL",
+                            "user_id": session.user.id,
+                        }, 200
+                except Exception:
+                    pass
+            return {
+                "error": "No login in progress. Call tidal_login first.",
+                "status": "error",
+            }, 400
 
-    future = state["future"]
+        future = state["future"]
 
-    if not future.done():
-        return {
-            "status": "pending",
-            "message": "Waiting for user to authorize in browser.",
-        }, 200
+        if not future.done():
+            return {
+                "status": "pending",
+                "message": "Waiting for user to authorize in browser.",
+            }, 200
 
-    # Future completed — check for errors
-    exc = future.exception()
-    with _pending_lock:
+        # Future completed — clear pending state while still under the lock
+        exc = future.exception()
         _pending = None
+
+    # Lock released — perform I/O outside the lock
 
     if exc is not None:
         return {
+            "error": f"Authorization failed: {str(exc)}",
             "status": "error",
-            "message": f"Authorization failed: {str(exc)}",
         }, 401
 
     # Success — save the session
@@ -131,8 +136,8 @@ def handle_login_poll(session_file: Path) -> Tuple[dict, int]:
         }, 200
     except Exception as e:
         return {
+            "error": f"Login succeeded but failed to save session: {str(e)}",
             "status": "error",
-            "message": f"Login succeeded but failed to save session: {str(e)}",
         }, 500
 
 
