@@ -7,6 +7,7 @@ no session files. They run instantly and are safe to run in CI.
 from unittest.mock import MagicMock
 
 from tidal_api.utils import bound_limit, fetch_all_items, format_track_data
+import tidal_api.utils as _utils_module
 
 
 # =============================================================================
@@ -37,6 +38,12 @@ class TestBoundLimit:
 
     def test_custom_max_within_range(self):
         assert bound_limit(30, max_n=100) == 30
+
+    def test_none_returns_default_max(self):
+        assert bound_limit(None) == 50
+
+    def test_none_returns_custom_max(self):
+        assert bound_limit(None, max_n=100) == 100
 
 
 # =============================================================================
@@ -122,6 +129,21 @@ class TestFetchAllItems:
         assert result == []
         fetch.assert_not_called()
 
+    def test_max_pages_guard_prevents_infinite_loop(self):
+        """If fetch_func ignores offset and always returns full pages,
+        the loop must stop after _MAX_PAGES iterations."""
+        from unittest.mock import patch as _patch
+
+        # Always return a full page (same data each time)
+        fetch = MagicMock(return_value=list(range(10)))
+
+        with _patch.object(_utils_module, "_MAX_PAGES", 5):
+            result = fetch_all_items(fetch, max_items=None, page_size=10)
+
+        # 5 pages * 10 items = 50 items
+        assert len(result) == 50
+        assert fetch.call_count == 5
+
 
 # =============================================================================
 # format_track_data
@@ -180,9 +202,21 @@ class TestFormatTrackData:
         result = format_track_data(track)
         assert result["artist"] == "Unknown"
 
+    def test_artist_fallback_when_no_artist_attr(self):
+        track = self._make_track()
+        del track.artist
+        result = format_track_data(track)
+        assert result["artist"] == "Unknown"
+
     def test_album_fallback_when_no_name_attr(self):
         track = self._make_track()
         track.album = object()  # plain object with no .name
+        result = format_track_data(track)
+        assert result["album"] == "Unknown"
+
+    def test_album_fallback_when_no_album_attr(self):
+        track = self._make_track()
+        del track.album
         result = format_track_data(track)
         assert result["album"] == "Unknown"
 
