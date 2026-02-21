@@ -16,11 +16,11 @@
       },
       "environmentVariables": [
         {
-          "description": "Port for the TIDAL API Flask server (default: 5050)",
+          "description": "Path to the TIDAL OAuth session file (default: {tempdir}/tidal-session-oauth.json)",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
-          "name": "TIDAL_MCP_PORT"
+          "name": "TIDAL_SESSION_FILE"
         }
       ]
     }
