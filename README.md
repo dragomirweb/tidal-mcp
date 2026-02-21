@@ -34,7 +34,7 @@ Every tool call loads the OAuth session from disk, calls the relevant `tidal_api
 - [uv](https://github.com/astral-sh/uv) — only required for local (non-Docker) installation
 - A TIDAL subscription
 
-### Option 1: Docker
+### Option 1: Docker (recommended)
 
 1. Clone the repository:
    ```bash
@@ -42,7 +42,12 @@ Every tool call loads the OAuth session from disk, calls the relevant `tidal_api
    cd tidal-mcp
    ```
 
-2. Authenticate with TIDAL (run once — saves the session to `/tmp`):
+2. Build the image:
+   ```bash
+   docker build -t tidal-mcp .
+   ```
+
+3. Authenticate with TIDAL (run once — saves the session to `session-data/`):
    ```bash
    docker-compose -f docker-compose.auth.yml run --rm tidal-auth
    ```
@@ -59,12 +64,7 @@ Every tool call loads the OAuth session from disk, calls the relevant `tidal_api
    ============================================================
    ```
 
-   Open the URL, log in, and the session is saved to `/tmp/tidal-session-oauth.json`.
-
-3. Build the image:
-   ```bash
-   docker build -t tidal-mcp .
-   ```
+   Open the URL in your browser, log in, and the session is saved to `session-data/tidal-session-oauth.json`.
 
 4. Configure your MCP client (see [MCP Client Configuration](#mcp-client-configuration)) and restart it.
 
@@ -91,16 +91,16 @@ Edit the config file:
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
-**Docker:**
+**Docker — macOS / Linux:**
 ```json
 {
   "mcpServers": {
     "TIDAL Integration": {
       "command": "docker",
       "args": [
-        "run", "--rm", "-i",
-        "--network", "host",
-        "-v", "/tmp:/tmp",
+        "run", "-i", "--rm",
+        "-v", "./session-data:/app/session-data",
+        "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
         "tidal-mcp"
       ]
     }
@@ -108,8 +108,26 @@ Edit the config file:
 }
 ```
 
-- `--network host` — lets the container reach the host network
-- `-v /tmp:/tmp` — mounts host `/tmp` so the TIDAL session persists across container restarts
+Replace `./session-data` with the absolute path to the `session-data/` directory inside your cloned repo if the relative path doesn't resolve.
+
+**Docker — Windows:**
+```json
+{
+  "mcpServers": {
+    "TIDAL Integration": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "C:\\path\\to\\tidal-mcp\\session-data:/app/session-data",
+        "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
+        "tidal-mcp"
+      ]
+    }
+  }
+}
+```
+
+> Docker is the recommended approach on Windows, especially when using WSL. It avoids path and venv compatibility issues between Windows and WSL Python environments.
 
 **Local — macOS / Linux:**
 ```json
@@ -123,49 +141,48 @@ Edit the config file:
 }
 ```
 
-**Local — Windows:**
+**Local — Windows (native Python):**
 ```json
 {
   "mcpServers": {
     "TIDAL Integration": {
       "command": "C:\\path\\to\\tidal-mcp\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\path\\to\\tidal-mcp\\start_mcp.py"],
-      "env": {
-        "TEMP": "C:\\Windows\\Temp"
-      }
+      "args": ["C:\\path\\to\\tidal-mcp\\start_mcp.py"]
     }
   }
 }
 ```
 
-> **Windows note:** The `TEMP` env var ensures the OAuth session file is written to a consistent path accessible by both the MCP server and any external auth scripts.
+> Requires a native Windows Python installation (not WSL). Run `uv sync` from a Windows terminal to create the `.venv\Scripts\` venv.
 
 ### Cursor
 
-Add to `~/.cursor/mcp.json`:
+Add to `~/.cursor/mcp.json`. The configuration is the same as Claude Desktop above — use the Docker or local variant that matches your setup:
 
-**macOS / Linux:**
+**Docker:**
+```json
+{
+  "mcpServers": {
+    "TIDAL Integration": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "./session-data:/app/session-data",
+        "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
+        "tidal-mcp"
+      ]
+    }
+  }
+}
+```
+
+**Local:**
 ```json
 {
   "mcpServers": {
     "TIDAL Integration": {
       "command": "/path/to/tidal-mcp/.venv/bin/python",
       "args": ["/path/to/tidal-mcp/start_mcp.py"]
-    }
-  }
-}
-```
-
-**Windows:**
-```json
-{
-  "mcpServers": {
-    "TIDAL Integration": {
-      "command": "C:\\path\\to\\tidal-mcp\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\path\\to\\tidal-mcp\\start_mcp.py"],
-      "env": {
-        "TEMP": "C:\\Windows\\Temp"
-      }
     }
   }
 }
@@ -178,6 +195,12 @@ The first time you use TIDAL MCP (or after your session expires), ask your AI as
 > _"Log me into TIDAL"_
 
 The assistant calls `tidal_login`, which returns a URL immediately. Open the URL in your browser and approve the TIDAL authorization. The assistant then polls `tidal_check_login` automatically until the login completes.
+
+**Docker users** can also pre-authenticate before using the MCP client:
+```bash
+docker-compose -f docker-compose.auth.yml run --rm tidal-auth
+```
+The session is saved to `session-data/tidal-session-oauth.json` and persists across container restarts via the volume mount.
 
 ## Available Tools
 
@@ -226,18 +249,66 @@ The assistant calls `tidal_login`, which returns a URL immediately. Open the URL
 
 ## Development
 
+### Setup
+
 ```bash
-# Install dependencies
-uv sync
-
-# Syntax-check all source files (what CI runs)
-python -m compileall mcp_server/ tidal_api/
-
-# Run the auth CLI (one-shot OAuth flow, writes session to /tmp)
-python auth_cli.py
+uv sync              # Install dependencies
+uv run pytest tests/ -v   # Run the test suite (199 tests)
 ```
 
-Tests live under `tests/` and run with `pytest`. CI validates syntax and runs the test suite on every push to `main`.
+### Testing
+
+The test suite covers all 17 MCP tools, all 19 route functions, and all utility helpers. Tests use `unittest.mock` to mock `tidalapi` and `mcp` at import time -- no TIDAL credentials or network access needed.
+
+```bash
+uv run pytest tests/ -v                          # Full suite
+uv run pytest tests/test_routes.py -v            # Route function tests only
+uv run pytest tests/test_server.py -v            # MCP tool tests only
+uv run pytest tests/test_routes.py::TestComprehensiveSearchHappyPath -v  # Single class
+```
+
+| Test file | Tests | Covers |
+|---|---|---|
+| `test_routes.py` | 98 | All route functions (auth, tracks, playlists, search) |
+| `test_server.py` | 65 | All 17 MCP tools, `_call()`, `_get_session()` |
+| `test_utils.py` | 27 | `bound_limit`, `fetch_all_items`, `format_track_data` |
+| `test_browser_session.py` | 6 | `_ensure_https`, `BrowserSession.login_oauth_start` |
+| `test_mcp_utils.py` | 3 | `SESSION_FILE` env var override logic |
+
+### Docker
+
+After making code changes, rebuild the image:
+```bash
+docker build -t tidal-mcp .
+```
+
+### Other useful commands
+
+```bash
+python -m compileall mcp_server/ tidal_api/   # Syntax-check all source files
+uv run python auth_cli.py                     # Standalone OAuth CLI
+uv run python start_mcp.py                    # Run the MCP server directly
+```
+
+### Project structure
+
+```
+mcp_server/
+  server.py          # FastMCP app, 17 @mcp.tool() definitions, session management
+  utils.py           # SESSION_FILE path constant (env var controlled)
+
+tidal_api/
+  browser_session.py # BrowserSession (tidalapi.Session wrapper)
+  utils.py           # format_track_data, bound_limit, fetch_all_items
+  routes/
+    auth.py          # handle_login_start, handle_login_poll, check_auth_status
+    tracks.py        # get_user_tracks, get_recommendations, get_batch_track_recommendations
+    playlists.py     # CRUD: create, get, delete, add/remove tracks, update, reorder
+    search.py        # comprehensive_search + 4 type-specific search functions
+
+tests/               # 199 unit tests (mocked deps, no credentials needed)
+  conftest.py        # Centralized sys.modules mocking for tidalapi + mcp
+```
 
 ## License
 
