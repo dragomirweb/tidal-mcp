@@ -18,7 +18,7 @@ from tidal_api.routes.auth import (
 )
 from tidal_api.routes.tracks import (
     get_user_tracks,
-    get_batch_track_recommendations,
+    get_recommendations,
 )
 from tidal_api.routes.playlists import (
     create_new_playlist,
@@ -50,42 +50,79 @@ print("TIDAL MCP server starting", file=sys.stderr)
 mcp = FastMCP("TIDAL MCP")
 
 # =============================================================================
-# CONSTANTS
+# SESSION ERROR
 # =============================================================================
 
-AUTH_ERROR_MESSAGE = (
-    "You need to login to TIDAL first before using this feature. "
-    "Please use the tidal_login() function."
-)
+
+class SessionError(Exception):
+    """Raised by _get_session() when no valid TIDAL session is available."""
+
+
+# =============================================================================
+# SESSION CACHE
+# =============================================================================
+
+_cached_session: Optional[BrowserSession] = None
+
 
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
 
-def _get_session() -> Optional[BrowserSession]:
+def _get_session() -> BrowserSession:
     """Load and validate the persisted TIDAL session from disk.
 
-    Returns a ready BrowserSession if the session is valid, or None if the
-    user needs to authenticate.
+    Returns a ready BrowserSession.  The session is cached so that
+    subsequent calls within the same process skip disk I/O and the
+    network ``check_login()`` round-trip.
+
+    Raises ``SessionError`` with a specific message when the session
+    cannot be obtained (no file, corrupt file, expired token).
     """
+    global _cached_session
+
+    if _cached_session is not None:
+        return _cached_session
+
     if not SESSION_FILE.exists():
-        return None
+        raise SessionError(
+            "No session found. Please use tidal_login() to authenticate."
+        )
+
     session = BrowserSession()
     try:
         session.load_session_from_file(SESSION_FILE)
-    except Exception:
-        return None
+    except Exception as e:
+        print(
+            f"Failed to load session file {SESSION_FILE}: {e}",
+            file=sys.stderr,
+        )
+        raise SessionError(
+            "Session file is corrupt or unreadable. "
+            "Please re-authenticate with tidal_login()."
+        ) from e
+
     if not session.check_login():
-        return None
+        raise SessionError(
+            "Session expired or invalid. Please re-authenticate with tidal_login()."
+        )
+
+    _cached_session = session
     return session
 
 
+def _invalidate_session() -> None:
+    """Clear the cached session so the next ``_get_session()`` reloads from disk."""
+    global _cached_session
+    _cached_session = None
+
+
 def _call(result: Tuple[dict, int]) -> dict:
-    """Convert a (dict, http_status) tuple from a route function into a plain
+    """Convert a (dict, status_code) tuple from a route function into a plain
     dict suitable for returning directly from an MCP tool.
 
-    On success (HTTP 200) the route dict is returned as-is so the caller gets
+    On success (status 200) the route dict is returned as-is so the caller gets
     e.g. {"tracks": [...]} rather than a double-wrapped envelope.
     On error the route's "error" key is preserved under "error".
     """
@@ -93,7 +130,7 @@ def _call(result: Tuple[dict, int]) -> dict:
     if status == 200:
         return data
     # Normalise error responses — route functions use "error" key
-    error_msg = data.get("error", f"Operation failed (HTTP {status}).")
+    error_msg = data.get("error", f"Operation failed (status {status}).")
     return {"error": error_msg}
 
 
@@ -113,20 +150,15 @@ def tidal_login() -> dict:
     2. {"status": "pending", "url": "https://...", "expires_in": N}
        — Present the URL to the user and ask them to open it in their browser.
          Then call tidal_check_login() every few seconds until it returns
-         {"status": "success"} (or "error" if the link expires).
+         {"status": "success"} (or an "error" key if the link expires).
 
     Always call this tool first if another tool returns an authentication error.
     """
     try:
-        body, status = handle_login_start(SESSION_FILE)
-        if status == 200:
-            return body
-        return {
-            "status": "error",
-            "message": body.get("message", "Login initiation failed."),
-        }
+        _invalidate_session()
+        return _call(handle_login_start(SESSION_FILE))
     except Exception as e:
-        return {"status": "error", "message": f"Unexpected error: {str(e)}"}
+        return {"error": f"Unexpected error: {str(e)}"}
 
 
 @mcp.tool()
@@ -142,21 +174,18 @@ def tidal_check_login() -> dict:
     Possible return values:
     - {"status": "pending"}  — user has not yet approved; call again shortly
     - {"status": "success"}  — user approved; TIDAL is ready to use
-    - {"status": "error"}    — authorization failed or the link expired;
+    - {"error": "..."}       — authorization failed or the link expired;
                                call tidal_login() again to get a fresh URL
 
     Do NOT call this tool before calling tidal_login() first.
     """
     try:
-        body, status = handle_login_poll(SESSION_FILE)
-        if status in (200, 400):
-            return body
-        return {
-            "status": "error",
-            "message": body.get("message", "Poll failed."),
-        }
+        result = _call(handle_login_poll(SESSION_FILE))
+        if result.get("status") == "success":
+            _invalidate_session()
+        return result
     except Exception as e:
-        return {"status": "error", "message": f"Unexpected error: {str(e)}"}
+        return {"error": f"Unexpected error: {str(e)}"}
 
 
 # =============================================================================
@@ -186,11 +215,11 @@ def get_favorite_tracks(limit: int = 20) -> dict:
         A dictionary with a "tracks" list, each item containing track ID, title,
         artist, album, and duration. Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(get_user_tracks(session, limit=limit))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -255,56 +284,19 @@ def recommend_tracks(
         A dictionary containing "seed_tracks", "recommendations", and
         "filter_criteria". Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
-
     try:
-        # Build the list of seed track IDs
-        seed_tracks: List[Dict[str, Any]] = []
-        seeds: List[str] = []
-
-        if track_ids:
-            seeds = [str(tid) for tid in track_ids]
-        else:
-            fav_data, fav_status = get_user_tracks(session, limit=limit_from_favorite)
-            if fav_status != 200:
-                return {
-                    "error": fav_data.get("error", "Failed to fetch favorite tracks.")
-                }
-            seed_tracks = fav_data.get("tracks", [])
-            seeds = [str(t["id"]) for t in seed_tracks]
-
-        if not seeds:
-            return {
-                "error": (
-                    "No seed tracks found. Make sure you have saved tracks in your "
-                    "TIDAL favorites, or provide explicit track_ids."
-                )
-            }
-
-        # Fetch recommendations for all seeds in one batch call
-        rec_data, rec_status = get_batch_track_recommendations(
-            session,
-            track_ids=seeds,
-            limit_per_track=limit_per_track,
-            remove_duplicates=True,
+        session = _get_session()
+        return _call(
+            get_recommendations(
+                session,
+                track_ids=track_ids,
+                filter_criteria=filter_criteria,
+                limit_per_track=limit_per_track,
+                limit_from_favorite=limit_from_favorite,
+            )
         )
-        if rec_status != 200:
-            return {"error": rec_data.get("error", "Failed to fetch recommendations.")}
-
-        seed_id_set = set(seeds)
-        filtered_recs = [
-            r
-            for r in rec_data.get("recommendations", [])
-            if str(r.get("id")) not in seed_id_set
-        ]
-
-        return {
-            "seed_tracks": seed_tracks,
-            "recommendations": filtered_recs,
-            "filter_criteria": filter_criteria,
-        }
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -358,11 +350,11 @@ def create_tidal_playlist(title: str, track_ids: list, description: str = "") ->
         A dictionary containing the status and details about the created playlist.
         Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(create_new_playlist(session, title, description, track_ids))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -391,11 +383,11 @@ def get_user_playlists() -> dict:
     Returns:
         A dictionary with a "playlists" list. Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(get_playlists(session))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -433,11 +425,11 @@ def get_playlist_tracks(playlist_id: str, limit: Optional[int] = None) -> dict:
         A dictionary with "playlist_id", "tracks", and "total_tracks".
         Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(get_tracks_from_playlist(session, playlist_id, limit))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -467,11 +459,11 @@ def delete_tidal_playlist(playlist_id: str) -> dict:
     Returns:
         A dictionary with a "status" and "message". Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(delete_playlist_by_id(session, playlist_id))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -502,11 +494,11 @@ def add_tracks_to_playlist(playlist_id: str, track_ids: list) -> dict:
     Returns:
         A dictionary with "status", "tracks_added". Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(add_tracks(session, playlist_id, track_ids))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -543,11 +535,11 @@ def remove_tracks_from_playlist(
     Returns:
         A dictionary with "status", "tracks_removed". Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(remove_tracks(session, playlist_id, track_ids, indices))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -583,13 +575,13 @@ def update_playlist_metadata(
     Returns:
         A dictionary with "status" and "updated_fields". Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(
             update_playlist_metadata_impl(session, playlist_id, title, description)
         )
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -621,11 +613,11 @@ def reorder_playlist_tracks(playlist_id: str, from_index: int, to_index: int) ->
     Returns:
         A dictionary with "status" and move details. Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(move_track(session, playlist_id, from_index, to_index))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -665,11 +657,11 @@ def search_tidal(query: str, search_type: str = "all", limit: int = 20) -> dict:
         A dictionary with "results" organized by content type and a "summary".
         Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(comprehensive_search(session, query, search_type, limit))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -693,11 +685,11 @@ def search_tracks(query: str, limit: int = 20) -> dict:
         A dictionary with "results.tracks.items" list and "count".
         Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(search_tracks_only(session, query, limit))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -721,11 +713,11 @@ def search_albums(query: str, limit: int = 20) -> dict:
         A dictionary with "results.albums.items" list and "count".
         Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(search_albums_only(session, query, limit))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -749,11 +741,11 @@ def search_artists(query: str, limit: int = 20) -> dict:
         A dictionary with "results.artists.items" list and "count".
         Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(search_artists_only(session, query, limit))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -777,10 +769,10 @@ def search_playlists(query: str, limit: int = 20) -> dict:
         A dictionary with "results.playlists.items" list and "count".
         Returns an "error" key on failure.
     """
-    session = _get_session()
-    if session is None:
-        return {"error": AUTH_ERROR_MESSAGE}
     try:
+        session = _get_session()
         return _call(search_playlists_only(session, query, limit))
+    except SessionError as e:
+        return {"error": str(e)}
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
