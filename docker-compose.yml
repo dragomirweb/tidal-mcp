@@ -3,3 +3,7 @@ services:
     build: .
     container_name: tidal-mcp
     restart: unless-stopped
+    volumes:
+      - ./session-data:/app/session-data:ro
+    environment:
+      - TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json
