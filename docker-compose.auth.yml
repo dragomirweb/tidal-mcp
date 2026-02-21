@@ -5,7 +5,9 @@ services:
     container_name: tidal-mcp-auth
     network_mode: host
     volumes:
-      - /tmp:/tmp
+      - ./session-data:/app/session-data
+    environment:
+      - TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json
     stdin_open: true
     tty: true
     command: /app/.venv/bin/python /app/auth_cli.py
