@@ -4,7 +4,6 @@ These tests have no external dependencies — no tidalapi, no network calls,
 no session files. They run instantly and are safe to run in CI.
 """
 
-import pytest
 from unittest.mock import MagicMock
 
 from tidal_api.utils import bound_limit, fetch_all_items, format_track_data
