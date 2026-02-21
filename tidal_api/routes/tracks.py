@@ -45,25 +45,6 @@ def get_user_tracks(session: BrowserSession, limit: int = 10) -> Tuple[dict, int
         return {"error": f"Error fetching tracks: {str(e)}"}, 500
 
 
-def get_single_track_recommendations(
-    session: BrowserSession, track_id: str, limit: int = 10
-) -> Tuple[dict, int]:
-    """Implementation logic for getting recommendations for a single track."""
-    try:
-        limit = bound_limit(limit)
-
-        track = session.track(track_id)
-        if not track:
-            return {"error": f"Track with ID {track_id} not found"}, 404
-
-        recommendations = track.get_track_radio(limit=limit)
-        track_list = [format_track_data(track) for track in recommendations]
-
-        return {"recommendations": track_list}, 200
-    except Exception as e:
-        return {"error": f"Error fetching recommendations: {str(e)}"}, 500
-
-
 def get_batch_track_recommendations(
     session: BrowserSession,
     track_ids: list,
