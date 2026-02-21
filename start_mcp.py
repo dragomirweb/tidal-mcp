@@ -58,7 +58,6 @@ if __name__ == "__main__":
     _install_stdin_proxy()
 
     # Import after proxy is installed so FastMCP inherits the proxied fd 0
-    sys.path.append(".")
     from mcp_server.server import mcp
 
     print("Starting TIDAL MCP server...", file=sys.stderr)
