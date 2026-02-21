@@ -1,3 +1,6 @@
+from typing import Optional
+
+
 def format_track_data(track, source_track_id=None):
     """
     Format a track object into a standardized dictionary.
@@ -12,8 +15,12 @@ def format_track_data(track, source_track_id=None):
     track_data = {
         "id": track.id,
         "title": track.name,
-        "artist": track.artist.name if hasattr(track.artist, "name") else "Unknown",
-        "album": track.album.name if hasattr(track.album, "name") else "Unknown",
+        "artist": track.artist.name
+        if hasattr(track, "artist") and hasattr(track.artist, "name")
+        else "Unknown",
+        "album": track.album.name
+        if hasattr(track, "album") and hasattr(track.album, "name")
+        else "Unknown",
         "duration": track.duration if hasattr(track, "duration") else 0,
         "url": f"https://tidal.com/browse/track/{track.id}?u",
     }
@@ -25,13 +32,21 @@ def format_track_data(track, source_track_id=None):
     return track_data
 
 
-def bound_limit(limit: int, max_n: int = 50) -> int:
-    """Clamp limit to the range [1, max_n]."""
+def bound_limit(limit: Optional[int], max_n: int = 50) -> int:
+    """Clamp limit to the range [1, max_n]. Returns max_n when limit is None."""
+    if limit is None:
+        return max_n
     if limit < 1:
         limit = 1
     elif limit > max_n:
         limit = max_n
     return limit
+
+
+# Safety valve: maximum number of pages to fetch before breaking out of the
+# pagination loop.  100 pages * 100 items/page = 10 000 items — well beyond
+# any realistic TIDAL collection size.
+_MAX_PAGES = 100
 
 
 def fetch_all_items(fetch_func, max_items=None, page_size=100):
@@ -46,10 +61,22 @@ def fetch_all_items(fetch_func, max_items=None, page_size=100):
     Returns:
         List of all fetched items
     """
+    import sys
+
     all_items = []
     offset = 0
+    pages_fetched = 0
 
     while True:
+        # Safety valve: prevent infinite loops if fetch_func ignores offset
+        if pages_fetched >= _MAX_PAGES:
+            print(
+                f"Pagination safety limit reached ({_MAX_PAGES} pages, "
+                f"{len(all_items)} items). Stopping.",
+                file=sys.stderr,
+            )
+            break
+
         # Calculate how many items to fetch in this batch
         if max_items is not None:
             remaining = max_items - len(all_items)
@@ -68,6 +95,7 @@ def fetch_all_items(fetch_func, max_items=None, page_size=100):
                 break
 
             all_items.extend(items)
+            pages_fetched += 1
 
             # If we got fewer items than requested, we've reached the end
             if len(items) < batch_size:
@@ -76,10 +104,14 @@ def fetch_all_items(fetch_func, max_items=None, page_size=100):
             offset += len(items)
 
         except Exception as e:
-            # If pagination fails, return what we have so far
-            import sys
-
-            print(f"Pagination stopped at offset {offset}: {str(e)}", file=sys.stderr)
+            # Return partial data — often more useful than failing entirely
+            # for a music browsing app.  Log enough context for debugging.
+            print(
+                f"Pagination error at offset {offset} "
+                f"({len(all_items)} items fetched so far): "
+                f"{type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
             break
 
     return all_items
