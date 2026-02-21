@@ -1,5 +1,6 @@
 """Playlist route implementation logic."""
 
+import sys
 from typing import Optional, Tuple
 
 from tidal_api.browser_session import BrowserSession
@@ -161,7 +162,6 @@ def remove_tracks(
     playlist_id: str,
     track_ids: Optional[list] = None,
     indices: Optional[list] = None,
-    logger=None,
 ) -> Tuple[dict, int]:
     """Implementation logic for removing tracks from a playlist."""
     try:
@@ -181,8 +181,10 @@ def remove_tracks(
                     playlist.remove_by_id(track_id)
                     removed_count += 1
                 except Exception as e:
-                    if logger:
-                        logger.warning(f"Could not remove track {track_id}: {str(e)}")
+                    print(
+                        f"Could not remove track {track_id}: {str(e)}",
+                        file=sys.stderr,
+                    )
 
         # Remove by indices
         elif indices is not None:
@@ -195,10 +197,10 @@ def remove_tracks(
                     playlist.remove_by_index(index)
                     removed_count += 1
                 except Exception as e:
-                    if logger:
-                        logger.warning(
-                            f"Could not remove track at index {index}: {str(e)}"
-                        )
+                    print(
+                        f"Could not remove track at index {index}: {str(e)}",
+                        file=sys.stderr,
+                    )
         else:
             return {"error": "Must provide either 'track_ids' or 'indices'"}, 400
 
