@@ -29,3 +29,14 @@ htmlcov
 .mypy_cache
 .dmypy.json
 dmypy.json
+
+# Credentials / secrets
+tidal-session-oauth.json
+*.oauth.json
+.env
+.env.*
+
+# Not needed at runtime
+tests/
+tasks/
+session-data/
