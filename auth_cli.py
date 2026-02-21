@@ -11,9 +11,9 @@ from pathlib import Path
 # Add tidal_api to path
 sys.path.insert(0, str(Path(__file__).parent / "tidal_api"))
 
-from browser_session import BrowserSession
+from browser_session import BrowserSession, _ensure_https
 
-SESSION_FILE = Path(tempfile.gettempdir()) / 'tidal-session-oauth.json'
+SESSION_FILE = Path(tempfile.gettempdir()) / "tidal-session-oauth.json"
 
 
 def print_auth_url(auth_url: str, expires_in: int):
@@ -43,9 +43,7 @@ def main():
     login, future = session.login_oauth()
 
     # Format and print the auth URL
-    auth_url = login.verification_uri_complete
-    if not auth_url.startswith('http'):
-        auth_url = 'https://' + auth_url
+    auth_url = _ensure_https(login.verification_uri_complete)
 
     print_auth_url(auth_url, login.expires_in)
 
