@@ -12,7 +12,6 @@ def comprehensive_search(
     query: str,
     search_type: str = "all",
     limit: int = 50,
-    logger=None,
 ) -> Tuple[dict, int]:
     """Implementation logic for comprehensive search."""
     try:
@@ -24,8 +23,6 @@ def comprehensive_search(
 
         if search_type == "all" or search_type == "tracks":
             track_results = session.search(query, limit=limit)
-            if logger:
-                logger.info(f"Track search results type: {type(track_results)}")
 
             tracks = []
             if hasattr(track_results, "tracks") and track_results.tracks:
@@ -43,8 +40,6 @@ def comprehensive_search(
 
         if search_type == "all" or search_type == "albums":
             album_results = session.search(query, limit=limit)
-            if logger:
-                logger.info(f"Album search results type: {type(album_results)}")
 
             albums = []
             if hasattr(album_results, "albums") and album_results.albums:
@@ -81,8 +76,6 @@ def comprehensive_search(
 
         if search_type == "all" or search_type == "artists":
             artist_results = session.search(query, limit=limit)
-            if logger:
-                logger.info(f"Artist search results type: {type(artist_results)}")
 
             artists = []
             if hasattr(artist_results, "artists") and artist_results.artists:
@@ -106,8 +99,6 @@ def comprehensive_search(
 
         if search_type == "all" or search_type == "playlists":
             playlist_results = session.search(query, limit=limit)
-            if logger:
-                logger.info(f"Playlist search results type: {type(playlist_results)}")
 
             playlists = []
             if hasattr(playlist_results, "playlists") and playlist_results.playlists:
@@ -156,16 +147,11 @@ def comprehensive_search(
         }, 200
 
     except Exception as e:
-        if logger:
-            logger.error(f"Search error: {str(e)}")
-            import traceback
-
-            logger.error(f"Traceback: {traceback.format_exc()}")
         return {"error": f"Search failed: {str(e)}"}, 500
 
 
 def search_tracks_only(
-    session: BrowserSession, query: str, limit: int = 50, logger=None
+    session: BrowserSession, query: str, limit: int = 50
 ) -> Tuple[dict, int]:
     """Implementation logic for tracks-only search."""
     try:
@@ -174,36 +160,21 @@ def search_tracks_only(
 
         limit = bound_limit(limit)
 
-        if logger:
-            logger.info(f"Searching for tracks: '{query}' with limit {limit}")
-
         # Try the basic search first
         results = session.search(query, limit=limit)
-        if logger:
-            logger.info(f"Search results type: {type(results)}")
 
         # Check if results is a dict or has tracks attribute
         if hasattr(results, "tracks") and results.tracks:
-            if logger:
-                logger.info(f"Found {len(results.tracks)} tracks via .tracks attribute")
             formatted_results = [format_track_data(track) for track in results.tracks]
         elif isinstance(results, dict) and "tracks" in results:
-            if logger:
-                logger.info(f"Found {len(results['tracks'])} tracks via dict key")
             formatted_results = [
                 format_track_data(track) for track in results["tracks"]
             ]
         elif isinstance(results, list):
-            if logger:
-                logger.info(f"Results is a list with {len(results)} items")
             formatted_results = [format_track_data(track) for track in results]
         else:
-            if logger:
-                logger.warning(f"Unexpected results format: {type(results)}")
             # Try with specific models parameter
             results = session.search(query, models=[tidalapi.Track], limit=limit)
-            if logger:
-                logger.info(f"Search with models results type: {type(results)}")
 
             if hasattr(results, "tracks") and results.tracks:
                 formatted_results = [
@@ -222,7 +193,6 @@ def search_tracks_only(
                     "limit": limit,
                     "results": {"tracks": {"items": [], "total": 0}},
                     "count": 0,
-                    "debug": f"No tracks found. Results type: {type(results)}, content: {str(results)[:200]}",
                 }, 200
 
         return {
@@ -236,16 +206,11 @@ def search_tracks_only(
         }, 200
 
     except Exception as e:
-        if logger:
-            logger.error(f"Track search error: {str(e)}")
-            import traceback
-
-            logger.error(f"Traceback: {traceback.format_exc()}")
         return {"error": f"Track search failed: {str(e)}"}, 500
 
 
 def search_albums_only(
-    session: BrowserSession, query: str, limit: int = 50, logger=None
+    session: BrowserSession, query: str, limit: int = 50
 ) -> Tuple[dict, int]:
     """Implementation logic for albums-only search."""
     try:
@@ -296,13 +261,11 @@ def search_albums_only(
             }, 200
 
     except Exception as e:
-        if logger:
-            logger.error(f"Album search error: {str(e)}")
         return {"error": f"Album search failed: {str(e)}"}, 500
 
 
 def search_artists_only(
-    session: BrowserSession, query: str, limit: int = 50, logger=None
+    session: BrowserSession, query: str, limit: int = 50
 ) -> Tuple[dict, int]:
     """Implementation logic for artists-only search."""
     try:
@@ -344,13 +307,11 @@ def search_artists_only(
             }, 200
 
     except Exception as e:
-        if logger:
-            logger.error(f"Artist search error: {str(e)}")
         return {"error": f"Artist search failed: {str(e)}"}, 500
 
 
 def search_playlists_only(
-    session: BrowserSession, query: str, limit: int = 50, logger=None
+    session: BrowserSession, query: str, limit: int = 50
 ) -> Tuple[dict, int]:
     """Implementation logic for playlists-only search."""
     try:
@@ -404,6 +365,4 @@ def search_playlists_only(
             }, 200
 
     except Exception as e:
-        if logger:
-            logger.error(f"Playlist search error: {str(e)}")
         return {"error": f"Playlist search failed: {str(e)}"}, 500
