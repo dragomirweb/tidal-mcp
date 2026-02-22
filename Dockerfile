@@ -5,8 +5,8 @@ WORKDIR /app
 # MCP server metadata
 LABEL io.modelcontextprotocol.server.name="io.github.ibeal/tidal-mcp"
 
-# Install uv for Python package management
-RUN pip install --no-cache-dir uv
+# Install uv for Python package management (standalone installer avoids QEMU segfaults on arm64)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install dependencies first (cached unless pyproject.toml/uv.lock change)
 COPY pyproject.toml uv.lock ./

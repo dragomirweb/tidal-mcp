@@ -1,7 +1,7 @@
 services:
   tidal-auth:
     build: .
-    image: tidal-mcp
+    image: dragomirweb/tidal-mcp
     container_name: tidal-mcp-auth
     network_mode: host
     volumes:

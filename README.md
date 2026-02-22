@@ -1,5 +1,7 @@
 # TIDAL MCP
 
+[![Docker Hub](https://img.shields.io/docker/v/dragomirweb/tidal-mcp?label=Docker%20Hub&sort=semver)](https://hub.docker.com/r/dragomirweb/tidal-mcp)
+
 A Model Context Protocol (MCP) server that connects AI assistants to the TIDAL music streaming API. Search, manage playlists, get recommendations, and control your TIDAL library through Claude or Cursor.
 
 ## How It Works
@@ -34,7 +36,42 @@ Every tool call loads the OAuth session from disk, calls the relevant `tidal_api
 - [uv](https://github.com/astral-sh/uv) — only required for local (non-Docker) installation
 - A TIDAL subscription
 
-### Option 1: Docker (recommended)
+### Option 1: Docker Hub (easiest)
+
+No cloning or building required — pull the pre-built image directly from Docker Hub. Supports both amd64 and arm64 (Apple Silicon).
+
+1. Pull the image:
+   ```bash
+   docker pull dragomirweb/tidal-mcp
+   ```
+
+2. Create a directory for the session file and authenticate with TIDAL:
+   ```bash
+   mkdir -p session-data
+   docker run -it --rm \
+     -v "$(pwd)/session-data:/app/session-data" \
+     -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json \
+     dragomirweb/tidal-mcp \
+     .venv/bin/python auth_cli.py
+   ```
+
+   The output will show an OAuth URL:
+   ```
+   ============================================================
+   TIDAL LOGIN REQUIRED
+   Please open this URL in your browser:
+
+   https://link.tidal.com/XXXXX
+
+   Expires in 300 seconds
+   ============================================================
+   ```
+
+   Open the URL in your browser, log in, and the session is saved to `session-data/tidal-session-oauth.json`.
+
+3. Configure your MCP client (see [MCP Client Configuration](#mcp-client-configuration)) and restart it.
+
+### Option 2: Docker (build from source)
 
 1. Clone the repository:
    ```bash
@@ -44,7 +81,7 @@ Every tool call loads the OAuth session from disk, calls the relevant `tidal_api
 
 2. Build the image:
    ```bash
-   docker build -t tidal-mcp .
+   docker build -t dragomirweb/tidal-mcp .
    ```
 
 3. Authenticate with TIDAL (run once — saves the session to `session-data/`):
@@ -68,7 +105,7 @@ Every tool call loads the OAuth session from disk, calls the relevant `tidal_api
 
 4. Configure your MCP client (see [MCP Client Configuration](#mcp-client-configuration)) and restart it.
 
-### Option 2: Local Python
+### Option 3: Local Python
 
 1. Clone the repository:
    ```bash
@@ -101,14 +138,14 @@ Edit the config file:
         "run", "-i", "--rm",
         "-v", "./session-data:/app/session-data",
         "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
-        "tidal-mcp"
+        "dragomirweb/tidal-mcp"
       ]
     }
   }
 }
 ```
 
-Replace `./session-data` with the absolute path to the `session-data/` directory inside your cloned repo if the relative path doesn't resolve.
+Replace `./session-data` with the absolute path to your `session-data/` directory if the relative path doesn't resolve.
 
 **Docker — Windows:**
 ```json
@@ -118,9 +155,9 @@ Replace `./session-data` with the absolute path to the `session-data/` directory
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
-        "-v", "C:\\path\\to\\tidal-mcp\\session-data:/app/session-data",
+        "-v", "C:\\path\\to\\session-data:/app/session-data",
         "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
-        "tidal-mcp"
+        "dragomirweb/tidal-mcp"
       ]
     }
   }
@@ -169,7 +206,7 @@ Add to `~/.cursor/mcp.json`. The configuration is the same as Claude Desktop abo
         "run", "-i", "--rm",
         "-v", "./session-data:/app/session-data",
         "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
-        "tidal-mcp"
+        "dragomirweb/tidal-mcp"
       ]
     }
   }
@@ -279,7 +316,7 @@ uv run pytest tests/test_routes.py::TestComprehensiveSearchHappyPath -v  # Singl
 
 After making code changes, rebuild the image:
 ```bash
-docker build -t tidal-mcp .
+docker build -t dragomirweb/tidal-mcp .
 ```
 
 ### Other useful commands
