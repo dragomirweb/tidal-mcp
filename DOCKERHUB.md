@@ -1,6 +1,6 @@
 # TIDAL MCP
 
-A Model Context Protocol (MCP) server that connects AI assistants to the TIDAL music streaming API. Search, manage playlists, get recommendations, and control your TIDAL library through Claude or Cursor.
+A Model Context Protocol (MCP) server that connects AI assistants to the TIDAL music streaming API. Search, manage playlists, get recommendations, and control your TIDAL library through Claude Desktop, Cursor, OpenCode, or Claude Code.
 
 ## Supported Tags
 
@@ -86,6 +86,64 @@ Replace `/Users/YOUR_USERNAME/.tidal-mcp` with the output of `echo ~/.tidal-mcp`
 ```
 
 Replace `C:\Users\YOUR_USERNAME\AppData\Roaming\tidal-mcp` with the output of `echo %APPDATA%\tidal-mcp`.
+
+**OpenCode** — add to `opencode.json` in your project root or `~/.config/opencode/opencode.json` for global access.
+
+**macOS / Linux:**
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "tidal": {
+      "type": "local",
+      "command": [
+        "docker", "run", "-i", "--rm",
+        "-v", "/Users/YOUR_USERNAME/.tidal-mcp:/app/session-data",
+        "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
+        "dragomirweb/tidal-mcp"
+      ]
+    }
+  }
+}
+```
+
+**Windows:**
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "tidal": {
+      "type": "local",
+      "command": [
+        "docker", "run", "-i", "--rm",
+        "-v", "C:\\Users\\YOUR_USERNAME\\AppData\\Roaming\\tidal-mcp:/app/session-data",
+        "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
+        "dragomirweb/tidal-mcp"
+      ]
+    }
+  }
+}
+```
+
+**Claude Code** — uses the `claude mcp add` CLI command. Config is stored in `~/.claude.json`.
+
+**macOS / Linux:**
+```bash
+claude mcp add --transport stdio --scope user tidal-mcp -- \
+  docker run -i --rm \
+  -v /Users/YOUR_USERNAME/.tidal-mcp:/app/session-data \
+  -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json \
+  dragomirweb/tidal-mcp
+```
+
+**Windows:**
+```bash
+claude mcp add --transport stdio --scope user tidal-mcp -- ^
+  docker run -i --rm ^
+  -v C:\Users\YOUR_USERNAME\AppData\Roaming\tidal-mcp:/app/session-data ^
+  -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json ^
+  dragomirweb/tidal-mcp
+```
 
 Restart your MCP client after saving the config.
 

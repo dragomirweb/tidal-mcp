@@ -261,6 +261,135 @@ Add to `~/.cursor/mcp.json`. The configuration is the same as Claude Desktop abo
 }
 ```
 
+### OpenCode
+
+Add to `opencode.json` in your project root, or `~/.config/opencode/opencode.json` for global access. See the [OpenCode MCP docs](https://opencode.ai/docs/mcp-servers/) for details.
+
+**Docker — macOS / Linux:**
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "tidal": {
+      "type": "local",
+      "command": [
+        "docker", "run", "-i", "--rm",
+        "-v", "/Users/YOUR_USERNAME/.tidal-mcp:/app/session-data",
+        "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
+        "dragomirweb/tidal-mcp"
+      ]
+    }
+  }
+}
+```
+
+Replace `/Users/YOUR_USERNAME/.tidal-mcp` with the absolute path to your `~/.tidal-mcp/` directory.
+
+**Docker — Windows:**
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "tidal": {
+      "type": "local",
+      "command": [
+        "docker", "run", "-i", "--rm",
+        "-v", "C:\\Users\\YOUR_USERNAME\\AppData\\Roaming\\tidal-mcp:/app/session-data",
+        "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
+        "dragomirweb/tidal-mcp"
+      ]
+    }
+  }
+}
+```
+
+Replace `C:\Users\YOUR_USERNAME\AppData\Roaming\tidal-mcp` with the output of `echo %APPDATA%\tidal-mcp`.
+
+**Local — macOS / Linux:**
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "tidal": {
+      "type": "local",
+      "command": ["/path/to/tidal-mcp/.venv/bin/python", "/path/to/tidal-mcp/start_mcp.py"]
+    }
+  }
+}
+```
+
+**Local — Windows:**
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "tidal": {
+      "type": "local",
+      "command": ["C:\\path\\to\\tidal-mcp\\.venv\\Scripts\\python.exe", "C:\\path\\to\\tidal-mcp\\start_mcp.py"]
+    }
+  }
+}
+```
+
+### Claude Code
+
+Uses the `claude mcp add` CLI command. See the [Claude Code MCP docs](https://docs.anthropic.com/en/docs/claude-code/mcp) for details.
+
+**Docker — macOS / Linux:**
+```bash
+claude mcp add --transport stdio --scope user tidal-mcp -- \
+  docker run -i --rm \
+  -v /Users/YOUR_USERNAME/.tidal-mcp:/app/session-data \
+  -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json \
+  dragomirweb/tidal-mcp
+```
+
+Replace `/Users/YOUR_USERNAME/.tidal-mcp` with the absolute path to your `~/.tidal-mcp/` directory.
+
+**Docker — Windows:**
+```bash
+claude mcp add --transport stdio --scope user tidal-mcp -- ^
+  docker run -i --rm ^
+  -v C:\Users\YOUR_USERNAME\AppData\Roaming\tidal-mcp:/app/session-data ^
+  -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json ^
+  dragomirweb/tidal-mcp
+```
+
+Replace `C:\Users\YOUR_USERNAME\AppData\Roaming\tidal-mcp` with the output of `echo %APPDATA%\tidal-mcp`.
+
+**Local — macOS / Linux:**
+```bash
+claude mcp add --transport stdio --scope user tidal-mcp -- \
+  /path/to/tidal-mcp/.venv/bin/python /path/to/tidal-mcp/start_mcp.py
+```
+
+**Local — Windows:**
+```bash
+claude mcp add --transport stdio --scope user tidal-mcp -- ^
+  C:\path\to\tidal-mcp\.venv\Scripts\python.exe C:\path\to\tidal-mcp\start_mcp.py
+```
+
+The commands above use `--scope user` to make the server available across all projects. The resulting config is stored in `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "tidal-mcp": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "/Users/YOUR_USERNAME/.tidal-mcp:/app/session-data",
+        "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
+        "dragomirweb/tidal-mcp"
+      ]
+    }
+  }
+}
+```
+
+> Use `--scope local` (default) for per-project config, or `--scope project` to create a shared `.mcp.json` in the project root.
+
 ## Authentication
 
 The first time you use TIDAL MCP (or after your session expires), ask your AI assistant to log you in:
