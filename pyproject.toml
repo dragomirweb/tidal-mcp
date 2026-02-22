@@ -1,6 +1,6 @@
 [project]
 name = "tidal-mcp"
-version = "0.2.0"
+version = "1.0.0"
 description = "Model Context Protocol server for TIDAL music streaming - search, create playlists, get recommendations, and manage your TIDAL library through Claude"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,9 +30,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ibeal/tidal-mcp"
-Repository = "https://github.com/ibeal/tidal-mcp"
-Issues = "https://github.com/ibeal/tidal-mcp/issues"
+Homepage = "https://github.com/dragomirweb/tidal-mcp"
+Repository = "https://github.com/dragomirweb/tidal-mcp"
+Issues = "https://github.com/dragomirweb/tidal-mcp/issues"
 
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -42,4 +42,4 @@ build-backend = "setuptools.build_meta"
 include = ["mcp_server*", "tidal_api*"]
 
 [tool.mcp]
-name = "io.github.ibeal/tidal-mcp"
+name = "io.github.dragomirweb/tidal-mcp"

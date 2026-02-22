@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # MCP server metadata
-LABEL io.modelcontextprotocol.server.name="io.github.ibeal/tidal-mcp"
+LABEL io.modelcontextprotocol.server.name="io.github.dragomirweb/tidal-mcp"
 
 # Install uv for Python package management (standalone installer avoids QEMU segfaults on arm64)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
