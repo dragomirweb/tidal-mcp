@@ -36,6 +36,22 @@ Every tool call loads the OAuth session from disk, calls the relevant `tidal_api
 - [uv](https://github.com/astral-sh/uv) — only required for local (non-Docker) installation
 - A TIDAL subscription
 
+### Session directory
+
+All installation methods store the TIDAL OAuth session in a local directory. Create it once before proceeding:
+
+**macOS / Linux:**
+```bash
+mkdir -p ~/.tidal-mcp
+```
+
+**Windows (PowerShell):**
+```powershell
+mkdir "$env:APPDATA\tidal-mcp"
+```
+
+This gives you a fixed, predictable location (`~/.tidal-mcp/` or `%APPDATA%\tidal-mcp\`) that the MCP client configs below reference by absolute path.
+
 ### Option 1: Docker Hub (easiest)
 
 No cloning or building required — pull the pre-built image directly from Docker Hub. Supports both amd64 and arm64 (Apple Silicon).
@@ -45,29 +61,27 @@ No cloning or building required — pull the pre-built image directly from Docke
    docker pull dragomirweb/tidal-mcp
    ```
 
-2. Create a directory for the session file and authenticate with TIDAL:
+2. Authenticate with TIDAL:
+
+   **macOS / Linux:**
    ```bash
-   mkdir -p session-data
    docker run -it --rm \
-     -v "$(pwd)/session-data:/app/session-data" \
+     -v ~/.tidal-mcp:/app/session-data \
      -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json \
      dragomirweb/tidal-mcp \
      .venv/bin/python auth_cli.py
    ```
 
-   The output will show an OAuth URL:
-   ```
-   ============================================================
-   TIDAL LOGIN REQUIRED
-   Please open this URL in your browser:
-
-   https://link.tidal.com/XXXXX
-
-   Expires in 300 seconds
-   ============================================================
+   **Windows (PowerShell):**
+   ```powershell
+   docker run -it --rm `
+     -v "$env:APPDATA\tidal-mcp:/app/session-data" `
+     -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json `
+     dragomirweb/tidal-mcp `
+     .venv/bin/python auth_cli.py
    ```
 
-   Open the URL in your browser, log in, and the session is saved to `session-data/tidal-session-oauth.json`.
+   Open the URL shown in the output, log in to TIDAL, and the session is saved automatically.
 
 3. Configure your MCP client (see [MCP Client Configuration](#mcp-client-configuration)) and restart it.
 
@@ -84,24 +98,27 @@ No cloning or building required — pull the pre-built image directly from Docke
    docker build -t dragomirweb/tidal-mcp .
    ```
 
-3. Authenticate with TIDAL (run once — saves the session to `session-data/`):
+3. Authenticate with TIDAL:
+
+   **macOS / Linux:**
    ```bash
-   docker-compose -f docker-compose.auth.yml run --rm tidal-auth
+   docker run -it --rm \
+     -v ~/.tidal-mcp:/app/session-data \
+     -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json \
+     dragomirweb/tidal-mcp \
+     .venv/bin/python auth_cli.py
    ```
 
-   The output will show an OAuth URL:
-   ```
-   ============================================================
-   TIDAL LOGIN REQUIRED
-   Please open this URL in your browser:
-
-   https://link.tidal.com/XXXXX
-
-   Expires in 300 seconds
-   ============================================================
+   **Windows (PowerShell):**
+   ```powershell
+   docker run -it --rm `
+     -v "$env:APPDATA\tidal-mcp:/app/session-data" `
+     -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json `
+     dragomirweb/tidal-mcp `
+     .venv/bin/python auth_cli.py
    ```
 
-   Open the URL in your browser, log in, and the session is saved to `session-data/tidal-session-oauth.json`.
+   Open the URL shown in the output, log in to TIDAL, and the session is saved automatically.
 
 4. Configure your MCP client (see [MCP Client Configuration](#mcp-client-configuration)) and restart it.
 
@@ -136,7 +153,7 @@ Edit the config file:
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
-        "-v", "./session-data:/app/session-data",
+        "-v", "/Users/YOUR_USERNAME/.tidal-mcp:/app/session-data",
         "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
         "dragomirweb/tidal-mcp"
       ]
@@ -145,7 +162,7 @@ Edit the config file:
 }
 ```
 
-Replace `./session-data` with the absolute path to your `session-data/` directory if the relative path doesn't resolve.
+Replace `/Users/YOUR_USERNAME/.tidal-mcp` with the absolute path to your `~/.tidal-mcp/` directory (run `echo ~/.tidal-mcp` to get it).
 
 **Docker — Windows:**
 ```json
@@ -155,7 +172,7 @@ Replace `./session-data` with the absolute path to your `session-data/` director
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
-        "-v", "C:\\path\\to\\session-data:/app/session-data",
+        "-v", "C:\\Users\\YOUR_USERNAME\\AppData\\Roaming\\tidal-mcp:/app/session-data",
         "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
         "dragomirweb/tidal-mcp"
       ]
@@ -163,6 +180,8 @@ Replace `./session-data` with the absolute path to your `session-data/` director
   }
 }
 ```
+
+Replace `C:\Users\YOUR_USERNAME\AppData\Roaming\tidal-mcp` with the output of `echo %APPDATA%\tidal-mcp` in a command prompt.
 
 > Docker is the recommended approach on Windows, especially when using WSL. It avoids path and venv compatibility issues between Windows and WSL Python environments.
 
@@ -196,7 +215,7 @@ Replace `./session-data` with the absolute path to your `session-data/` director
 
 Add to `~/.cursor/mcp.json`. The configuration is the same as Claude Desktop above — use the Docker or local variant that matches your setup:
 
-**Docker:**
+**Docker — macOS / Linux:**
 ```json
 {
   "mcpServers": {
@@ -204,7 +223,24 @@ Add to `~/.cursor/mcp.json`. The configuration is the same as Claude Desktop abo
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
-        "-v", "./session-data:/app/session-data",
+        "-v", "/Users/YOUR_USERNAME/.tidal-mcp:/app/session-data",
+        "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
+        "dragomirweb/tidal-mcp"
+      ]
+    }
+  }
+}
+```
+
+**Docker — Windows:**
+```json
+{
+  "mcpServers": {
+    "TIDAL Integration": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "C:\\Users\\YOUR_USERNAME\\AppData\\Roaming\\tidal-mcp:/app/session-data",
         "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
         "dragomirweb/tidal-mcp"
       ]
@@ -233,11 +269,7 @@ The first time you use TIDAL MCP (or after your session expires), ask your AI as
 
 The assistant calls `tidal_login`, which returns a URL immediately. Open the URL in your browser and approve the TIDAL authorization. The assistant then polls `tidal_check_login` automatically until the login completes.
 
-**Docker users** can also pre-authenticate before using the MCP client:
-```bash
-docker-compose -f docker-compose.auth.yml run --rm tidal-auth
-```
-The session is saved to `session-data/tidal-session-oauth.json` and persists across container restarts via the volume mount.
+**Docker users** can also pre-authenticate before using the MCP client (see the auth commands in [Installation](#installation) above). The session is saved to `~/.tidal-mcp/tidal-session-oauth.json` (macOS/Linux) or `%APPDATA%\tidal-mcp\tidal-session-oauth.json` (Windows) and persists across container restarts via the volume mount.
 
 ## Available Tools
 
@@ -290,7 +322,7 @@ The session is saved to `session-data/tidal-session-oauth.json` and persists acr
 
 ```bash
 uv sync              # Install dependencies
-uv run pytest tests/ -v   # Run the test suite (199 tests)
+uv run pytest tests/ -v   # Run the test suite (200 tests)
 ```
 
 ### Testing
@@ -343,7 +375,7 @@ tidal_api/
     playlists.py     # CRUD: create, get, delete, add/remove tracks, update, reorder
     search.py        # comprehensive_search + 4 type-specific search functions
 
-tests/               # 199 unit tests (mocked deps, no credentials needed)
+tests/               # 200 unit tests (mocked deps, no credentials needed)
   conftest.py        # Centralized sys.modules mocking for tidalapi + mcp
 ```
 

@@ -19,25 +19,37 @@ A Model Context Protocol (MCP) server that connects AI assistants to the TIDAL m
 docker pull dragomirweb/tidal-mcp
 ```
 
-### 2. Authenticate with TIDAL
+### 2. Create the session directory and authenticate
 
-Create a directory for the session file and run the auth CLI:
-
+**macOS / Linux:**
 ```bash
-mkdir -p session-data
+mkdir -p ~/.tidal-mcp
 docker run -it --rm \
-  -v "$(pwd)/session-data:/app/session-data" \
+  -v ~/.tidal-mcp:/app/session-data \
   -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json \
   dragomirweb/tidal-mcp \
   .venv/bin/python auth_cli.py
 ```
 
-Open the URL shown in the output, log in to TIDAL, and the session is saved to `session-data/tidal-session-oauth.json`.
+**Windows (PowerShell):**
+```powershell
+mkdir "$env:APPDATA\tidal-mcp"
+docker run -it --rm `
+  -v "$env:APPDATA\tidal-mcp:/app/session-data" `
+  -e TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json `
+  dragomirweb/tidal-mcp `
+  .venv/bin/python auth_cli.py
+```
+
+Open the URL shown in the output and log in to TIDAL. The session is saved automatically.
 
 ### 3. Configure your MCP client
 
-**Claude Desktop** — edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+**Claude Desktop** — edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 
+**Cursor** — edit `~/.cursor/mcp.json`.
+
+**macOS / Linux:**
 ```json
 {
   "mcpServers": {
@@ -45,7 +57,7 @@ Open the URL shown in the output, log in to TIDAL, and the session is saved to `
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
-        "-v", "./session-data:/app/session-data",
+        "-v", "/Users/YOUR_USERNAME/.tidal-mcp:/app/session-data",
         "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
         "dragomirweb/tidal-mcp"
       ]
@@ -54,9 +66,26 @@ Open the URL shown in the output, log in to TIDAL, and the session is saved to `
 }
 ```
 
-Replace `./session-data` with the absolute path to your `session-data/` directory if the relative path doesn't resolve.
+Replace `/Users/YOUR_USERNAME/.tidal-mcp` with the output of `echo ~/.tidal-mcp`.
 
-**Cursor** — add the same configuration to `~/.cursor/mcp.json`.
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "TIDAL Integration": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "C:\\Users\\YOUR_USERNAME\\AppData\\Roaming\\tidal-mcp:/app/session-data",
+        "-e", "TIDAL_SESSION_FILE=/app/session-data/tidal-session-oauth.json",
+        "dragomirweb/tidal-mcp"
+      ]
+    }
+  }
+}
+```
+
+Replace `C:\Users\YOUR_USERNAME\AppData\Roaming\tidal-mcp` with the output of `echo %APPDATA%\tidal-mcp`.
 
 Restart your MCP client after saving the config.
 
