@@ -10,6 +10,7 @@ details on how tidalapi is patched at import time.
 from unittest.mock import MagicMock, patch
 
 from pathlib import Path
+from types import SimpleNamespace
 from concurrent.futures import Future
 
 # Route modules are imported by conftest.py with tidalapi already mocked.
@@ -329,33 +330,35 @@ class TestUpdatePlaylistMetadataValidation:
         assert status == 400
         assert "Must provide" in data["error"]
 
-    def test_empty_title_allowed(self):
-        """An empty string title should be accepted (deliberate clear)."""
+    def test_empty_title_returns_400(self):
         session = MagicMock()
-        mock_playlist = MagicMock()
-        mock_playlist.name = "Old Title"
-        mock_playlist.description = "Old Desc"
-        session.playlist.return_value = mock_playlist
 
         data, status = _playlists_module.update_playlist_metadata(
             session, "pl-1", title=""
         )
-        assert status == 200
-        assert data["updated_fields"]["title"] == ""
+        assert status == 400
+        assert "title" in data["error"]
 
-    def test_empty_description_allowed(self):
-        """An empty string description should be accepted (deliberate clear)."""
+    def test_empty_description_returns_400(self):
         session = MagicMock()
-        mock_playlist = MagicMock()
-        mock_playlist.name = "Title"
-        mock_playlist.description = "Old Desc"
-        session.playlist.return_value = mock_playlist
 
         data, status = _playlists_module.update_playlist_metadata(
             session, "pl-1", description=""
         )
-        assert status == 200
-        assert data["updated_fields"]["description"] == ""
+        assert status == 400
+        assert "description" in data["error"]
+
+    def test_false_edit_result_returns_500(self):
+        session = MagicMock()
+        mock_playlist = MagicMock()
+        mock_playlist.edit.return_value = False
+        session.playlist.return_value = mock_playlist
+
+        data, status = _playlists_module.update_playlist_metadata(
+            session, "pl-1", title="New Title"
+        )
+        assert status == 500
+        assert "not updated" in data["error"]
 
 
 # =============================================================================
@@ -788,9 +791,28 @@ class TestCreateNewPlaylistHappyPath:
 
         assert status == 200
         assert data["status"] == "success"
-        assert "2 tracks" in data["message"]
+        assert data["tracks_requested"] == 2
+        assert data["tracks_added"] == 2
+        assert data["tracks_skipped"] == 0
         assert data["playlist"]["id"] == "pl-1"
         mock_pl.add.assert_called_once_with(["t1", "t2"])
+
+    def test_create_reports_partially_added_tracks(self):
+        session = MagicMock()
+        mock_pl = _make_mock_playlist()
+        mock_pl.add.return_value = ["t1"]
+        session.user.create_playlist.return_value = mock_pl
+
+        data, status = _playlists_module.create_new_playlist(
+            session, "My Playlist", "A playlist", ["t1", "bad"]
+        )
+
+        assert status == 200
+        assert data["status"] == "partial_success"
+        assert data["tracks_requested"] == 2
+        assert data["tracks_added"] == 1
+        assert data["tracks_skipped"] == 1
+        assert data["added_track_ids"] == ["t1"]
 
     def test_hasattr_fallback_on_missing_attributes(self):
         """If the playlist object is missing optional attributes, fallbacks work."""
@@ -863,6 +885,26 @@ class TestGetPlaylists:
         assert pl["created"] is None
         assert pl["track_count"] == 0
         assert pl["duration"] == 0
+
+    def test_missing_last_updated_sorts_without_error(self):
+        session = MagicMock()
+        with_date = _make_mock_playlist(id="with-date", last_updated="2026-01-01")
+        missing_date = MagicMock(spec=[])
+        missing_date.id = "missing-date"
+        missing_date.name = "Missing Date"
+        missing_date.description = ""
+        missing_date.created = None
+        missing_date.num_tracks = 0
+        missing_date.duration = 0
+        session.user.playlists.return_value = [with_date, missing_date]
+
+        data, status = _playlists_module.get_playlists(session)
+
+        assert status == 200
+        assert [pl["id"] for pl in data["playlists"]] == [
+            "with-date",
+            "missing-date",
+        ]
 
     def test_url_format(self):
         session = MagicMock()
@@ -945,6 +987,17 @@ class TestDeletePlaylist:
         assert status == 500
         assert "error" in data
 
+    def test_false_return_reports_error(self):
+        session = MagicMock()
+        mock_pl = _make_mock_playlist(id="pl-1")
+        mock_pl.delete.return_value = False
+        session.playlist.return_value = mock_pl
+
+        data, status = _playlists_module.delete_playlist_by_id(session, "pl-1")
+
+        assert status == 500
+        assert "not deleted" in data["error"]
+
 
 class TestAddTracksHappyPath:
     """Happy-path tests for add_tracks()."""
@@ -959,7 +1012,37 @@ class TestAddTracksHappyPath:
         assert status == 200
         assert data["status"] == "success"
         assert data["tracks_added"] == 2
+        assert data["tracks_requested"] == 2
+        assert data["tracks_skipped"] == 0
         mock_pl.add.assert_called_once_with(["t1", "t2"])
+
+    def test_add_tracks_reports_partial_success(self):
+        session = MagicMock()
+        mock_pl = _make_mock_playlist(id="pl-1")
+        mock_pl.add.return_value = ["t1"]
+        session.playlist.return_value = mock_pl
+
+        data, status = _playlists_module.add_tracks(session, "pl-1", ["t1", "bad"])
+
+        assert status == 200
+        assert data["status"] == "partial_success"
+        assert data["tracks_added"] == 1
+        assert data["tracks_requested"] == 2
+        assert data["tracks_skipped"] == 1
+        assert data["added_track_ids"] == ["t1"]
+
+    def test_add_tracks_reports_no_changes(self):
+        session = MagicMock()
+        mock_pl = _make_mock_playlist(id="pl-1")
+        mock_pl.add.return_value = []
+        session.playlist.return_value = mock_pl
+
+        data, status = _playlists_module.add_tracks(session, "pl-1", ["dupe"])
+
+        assert status == 200
+        assert data["status"] == "no_changes"
+        assert data["tracks_added"] == 0
+        assert data["tracks_skipped"] == 1
 
     def test_exception_returns_500(self):
         session = MagicMock()
@@ -986,7 +1069,9 @@ class TestRemoveTracks:
         )
 
         assert status == 200
+        assert data["status"] == "success"
         assert data["tracks_removed"] == 2
+        assert data["tracks_failed"] == 0
         assert mock_pl.remove_by_id.call_count == 2
 
     def test_remove_by_indices(self):
@@ -999,20 +1084,21 @@ class TestRemoveTracks:
         )
 
         assert status == 200
+        assert data["status"] == "success"
         assert data["tracks_removed"] == 3
+        assert data["tracks_failed"] == 0
         # Should be called in descending order to avoid shifting
         calls = [c.args[0] for c in mock_pl.remove_by_index.call_args_list]
         assert calls == [5, 2, 0]
 
     def test_neither_provided_returns_400(self):
         session = MagicMock()
-        mock_pl = _make_mock_playlist()
-        session.playlist.return_value = mock_pl
 
         data, status = _playlists_module.remove_tracks(session, "pl-1")
 
         assert status == 400
         assert "Must provide" in data["error"]
+        session.playlist.assert_not_called()
 
     def test_partial_failure_still_succeeds(self):
         """If one track fails to remove, the others are still counted."""
@@ -1025,6 +1111,7 @@ class TestRemoveTracks:
             call_count[0] += 1
             if track_id == "bad":
                 raise RuntimeError("not found")
+            return True
 
         mock_pl.remove_by_id.side_effect = remove_side_effect
         session.playlist.return_value = mock_pl
@@ -1034,13 +1121,27 @@ class TestRemoveTracks:
         )
 
         assert status == 200
+        assert data["status"] == "partial_success"
         # 2 succeeded, 1 failed
         assert data["tracks_removed"] == 2
+        assert data["tracks_failed"] == 1
+
+    def test_false_remove_results_are_not_counted(self):
+        session = MagicMock()
+        mock_pl = _make_mock_playlist()
+        mock_pl.remove_by_id.return_value = False
+        session.playlist.return_value = mock_pl
+
+        data, status = _playlists_module.remove_tracks(
+            session, "pl-1", track_ids=["missing"]
+        )
+
+        assert status == 400
+        assert data["tracks_removed"] == 0
+        assert data["tracks_failed"] == 1
 
     def test_non_list_track_ids_returns_400(self):
         session = MagicMock()
-        mock_pl = _make_mock_playlist()
-        session.playlist.return_value = mock_pl
 
         data, status = _playlists_module.remove_tracks(
             session, "pl-1", track_ids="not-a-list"
@@ -1048,11 +1149,10 @@ class TestRemoveTracks:
 
         assert status == 400
         assert "list" in data["error"]
+        session.playlist.assert_not_called()
 
     def test_non_list_indices_returns_400(self):
         session = MagicMock()
-        mock_pl = _make_mock_playlist()
-        session.playlist.return_value = mock_pl
 
         data, status = _playlists_module.remove_tracks(
             session, "pl-1", indices="not-a-list"
@@ -1060,6 +1160,27 @@ class TestRemoveTracks:
 
         assert status == 400
         assert "list" in data["error"]
+        session.playlist.assert_not_called()
+
+    def test_empty_track_ids_returns_400_before_playlist_lookup(self):
+        session = MagicMock()
+
+        data, status = _playlists_module.remove_tracks(
+            session, "pl-1", track_ids=[]
+        )
+
+        assert status == 400
+        assert "at least one" in data["error"]
+        session.playlist.assert_not_called()
+
+    def test_empty_indices_returns_400_before_playlist_lookup(self):
+        session = MagicMock()
+
+        data, status = _playlists_module.remove_tracks(session, "pl-1", indices=[])
+
+        assert status == 400
+        assert "at least one" in data["error"]
+        session.playlist.assert_not_called()
 
 
 class TestMoveTrack:
@@ -1102,6 +1223,17 @@ class TestMoveTrack:
 
         assert status == 500
         assert "error" in data
+
+    def test_false_return_reports_error(self):
+        session = MagicMock()
+        mock_pl = _make_mock_playlist()
+        mock_pl.move_by_index.return_value = False
+        session.playlist.return_value = mock_pl
+
+        data, status = _playlists_module.move_track(session, "pl-1", 0, 3)
+
+        assert status == 400
+        assert "not moved" in data["error"]
 
 
 # =============================================================================
@@ -1214,6 +1346,19 @@ class TestComprehensiveSearchHappyPath:
         assert "albums" in data["results"]
         assert "tracks" not in data["results"]
 
+    def test_album_without_artist_uses_unknown_fallback(self):
+        session = MagicMock()
+        album = SimpleNamespace(id=1, name="No Artist Album")
+        session.search.return_value = _make_search_results(albums=[album])
+
+        data, status = _search_module.comprehensive_search(
+            session, "test", search_type="albums"
+        )
+
+        assert status == 200
+        item = data["results"]["albums"]["items"][0]
+        assert item["artist"] == "Unknown Artist"
+
     def test_empty_results(self):
         session = MagicMock()
         session.search.return_value = _make_search_results()
@@ -1312,6 +1457,32 @@ class TestSearchAlbumsOnly:
 
         assert status == 200
         assert data["count"] == 0
+
+    def test_missing_artist_uses_unknown_fallback(self):
+        session = MagicMock()
+        mock_results = MagicMock()
+        mock_results.albums = [SimpleNamespace(id=1, name="No Artist Album")]
+        session.search.return_value = mock_results
+
+        data, status = _search_module.search_albums_only(session, "test")
+
+        assert status == 200
+        item = data["results"]["albums"]["items"][0]
+        assert item["artist"] == "Unknown Artist"
+
+    def test_artist_without_name_uses_unknown_fallback(self):
+        session = MagicMock()
+        mock_results = MagicMock()
+        mock_results.albums = [
+            SimpleNamespace(id=1, name="No Artist Name Album", artist=object())
+        ]
+        session.search.return_value = mock_results
+
+        data, status = _search_module.search_albums_only(session, "test")
+
+        assert status == 200
+        item = data["results"]["albums"]["items"][0]
+        assert item["artist"] == "Unknown Artist"
 
     def test_exception_returns_500(self):
         session = MagicMock()

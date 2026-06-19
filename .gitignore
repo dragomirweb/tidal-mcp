@@ -33,6 +33,7 @@ tidal-session-oauth.json
 
 # Claude Code machine-specific config
 /.claude/
+/.developer/
 
 # OS files
 .DS_Store
