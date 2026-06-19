@@ -26,7 +26,7 @@ Claude Desktop / Cursor
       TIDAL
 ```
 
-Every tool call loads the OAuth session from disk, calls the relevant `tidal_api/routes/` function directly, and returns. No internal HTTP server, no child processes, no ports.
+Tool calls use a validated OAuth session from disk and keep it cached in-process after the first successful load. Auth tools invalidate that cache when needed. The MCP layer calls the relevant `tidal_api/routes/` function directly and returns. No internal HTTP server, no child processes, no ports.
 
 ## Installation
 
@@ -451,7 +451,7 @@ The assistant calls `tidal_login`, which returns a URL immediately. Open the URL
 
 ```bash
 uv sync              # Install dependencies
-uv run pytest tests/ -v   # Run the test suite (200 tests)
+uv run pytest tests/ -v   # Run the test suite (213 tests)
 ```
 
 ### Testing
@@ -467,7 +467,7 @@ uv run pytest tests/test_routes.py::TestComprehensiveSearchHappyPath -v  # Singl
 
 | Test file | Tests | Covers |
 |---|---|---|
-| `test_routes.py` | 98 | All route functions (auth, tracks, playlists, search) |
+| `test_routes.py` | 112 | All route functions (auth, tracks, playlists, search) |
 | `test_server.py` | 65 | All 17 MCP tools, `_call()`, `_get_session()` |
 | `test_utils.py` | 27 | `bound_limit`, `fetch_all_items`, `format_track_data` |
 | `test_browser_session.py` | 6 | `_ensure_https`, `BrowserSession.login_oauth_start` |
@@ -504,7 +504,7 @@ tidal_api/
     playlists.py     # CRUD: create, get, delete, add/remove tracks, update, reorder
     search.py        # comprehensive_search + 4 type-specific search functions
 
-tests/               # 200 unit tests (mocked deps, no credentials needed)
+tests/               # 213 unit tests (mocked deps, no credentials needed)
   conftest.py        # Centralized sys.modules mocking for tidalapi + mcp
 ```
 

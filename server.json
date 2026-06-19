@@ -1,16 +1,16 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.ibeal/tidal-mcp",
+  "name": "io.github.dragomirweb/tidal-mcp",
   "description": "MCP server for TIDAL - search tracks, manage playlists, and get personalized recommendations",
   "repository": {
-    "url": "https://github.com/ibeal/tidal-mcp",
+    "url": "https://github.com/dragomirweb/tidal-mcp",
     "source": "github"
   },
-  "version": "0.2.0",
+  "version": "1.0.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/ibeal/tidal-mcp:latest",
+      "identifier": "docker.io/dragomirweb/tidal-mcp:latest",
       "transport": {
         "type": "stdio"
       },

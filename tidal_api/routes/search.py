@@ -135,7 +135,11 @@ def _format_album(album) -> dict:
     return {
         "id": album.id,
         "title": album.name,
-        "artist": album.artist.name if album.artist else "Unknown Artist",
+        "artist": album.artist.name
+        if hasattr(album, "artist")
+        and album.artist
+        and hasattr(album.artist, "name")
+        else "Unknown Artist",
         "release_date": str(album.release_date)
         if hasattr(album, "release_date") and album.release_date
         else None,
