@@ -6,7 +6,7 @@
     "url": "https://github.com/dragomirweb/tidal-mcp",
     "source": "github"
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "packages": [
     {
       "registryType": "oci",

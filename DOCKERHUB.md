@@ -4,7 +4,8 @@ A Model Context Protocol (MCP) server that connects AI assistants to the TIDAL m
 
 ## Supported Tags
 
-- `latest`, `v1.0.1` — Python 3.13, all dependencies up to date, zero known CVEs
+- `latest`, `v1.0.2` — Playlist route edge-case fixes and defensive album search formatting
+- `v1.0.1` — Python 3.13, all dependencies up to date, zero known CVEs
 - `v1.0.0` — Python 3.11, initial release
 
 ## Supported Architectures
